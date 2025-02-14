@@ -14,7 +14,7 @@ WIDTH, HEIGHT = 1280, 720
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Finger Tracking Game")
 
-target_img = pygame.image.load("C:/Users/Evan/Desktop/chips game/chips.png")  
+target_img = pygame.image.load("chips.png")  
 target_size = 150
 target_img = pygame.transform.scale(target_img, (target_size, target_size))
 
