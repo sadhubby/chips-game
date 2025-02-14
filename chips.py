@@ -45,7 +45,7 @@ def draw_text_outline(surface, text, x, y, font, color, outline_color):
     
     # Draw main text
     surface.blit(text_surface, (x, y))
-n
+
 def detect_snap(hand_landmarks):
     global snap_detected
 
@@ -102,7 +102,7 @@ while running:
 
         
                 if abs(ix - target_x) < target_size//2 and abs(iy - target_y) < target_size//2:
-                    target_x, target_y = np.random.randint(50, WIDTH-50), np.random.randint(50, HEIGHT-50)  # New target
+                    target_x, target_y = np.random.randint(50, WIDTH-50), np.random.randint(50, HEIGHT-50)  
                     score += 1  
 
 
