@@ -1,136 +1,132 @@
 import cv2
-import mediapipe as mp
 import numpy as np
 import pygame
 import time
+from cvzone.HandTrackingModule import HandDetector
 
+# Initialize Hand Detector
+detector = HandDetector(detectionCon=0.7, maxHands=1)
 
-mp_hands = mp.solutions.hands
-hands = mp_hands.Hands(min_detection_confidence=0.7, min_tracking_confidence=0.7)
-
-
+# Initialize Pygame
 pygame.init()
 WIDTH, HEIGHT = 1280, 720
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Finger Tracking Game")
 
-target_img = pygame.image.load("chips.png")  
+# Load Target Image
+target_img = pygame.image.load("chips.png")
 target_size = 150
 target_img = pygame.transform.scale(target_img, (target_size, target_size))
 
-
+# Load Camera
 cap = cv2.VideoCapture(0)
+cap.set(3, WIDTH)
+cap.set(4, HEIGHT)
 
-font = pygame.font.Font(None, 50)  
+# Font Setup
+font = pygame.font.Font(None, 50)
 
+# Game State
 game_started = False
-snap_detected = False
 score = 0
-timer = 30  
-start_time = None  
+timer = 30
+start_time = None
+prev_distance = None
+snap_detected = False
+snap_cooldown = False  # Prevents restart during game
+game_over_time = None  # Tracks when game over screen starts
 
-
-target_x, target_y = np.random.randint(50, WIDTH-50), np.random.randint(50, HEIGHT-50)
-
+# Target Position
+target_x, target_y = np.random.randint(50, WIDTH - 50), np.random.randint(50, HEIGHT - 50)
 
 def draw_text_outline(surface, text, x, y, font, color, outline_color):
     text_surface = font.render(text, True, color)
     outline_surface = font.render(text, True, outline_color)
     
-
     surface.blit(outline_surface, (x-2, y-2))
     surface.blit(outline_surface, (x+2, y-2))
     surface.blit(outline_surface, (x-2, y+2))
     surface.blit(outline_surface, (x+2, y+2))
     
-
     surface.blit(text_surface, (x, y))
-
-def detect_snap(hand_landmarks):
-    global snap_detected
-
-    thumb_tip = hand_landmarks.landmark[4]
-    middle_tip = hand_landmarks.landmark[12]
-
-    distance = np.linalg.norm(
-        np.array([thumb_tip.x, thumb_tip.y]) - np.array([middle_tip.x, middle_tip.y])
-    )
-
-    if distance < 0.05:
-        snap_detected = True
-    elif snap_detected and distance > 0.1:  
-        snap_detected = False
-        return True  
-    
-    return False  
 
 running = True
 while running:
-    _, frame = cap.read()
-    frame = cv2.flip(frame, 1)
-
+    success, frame = cap.read()
+    frame = cv2.flip(frame, 1)  # Flip frame to match natural movement
+    
+    hands, frame = detector.findHands(frame, flipType=False)
+    
     frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
     frame_surface = pygame.surfarray.make_surface(np.rot90(frame))
-    frame_surface = pygame.transform.scale(frame_surface, (WIDTH, HEIGHT)) 
-
+    frame_surface = pygame.transform.scale(frame_surface, (WIDTH, HEIGHT))
     screen.blit(frame_surface, (0, 0))
+    
+    if hands:
+        hand = hands[0]
+        lmList = hand["lmList"]
 
-    frame_for_mediapipe = np.flip(frame, axis=1)  
+        index_finger = lmList[8]  # Index finger tip
+        thumb = lmList[4]  # Thumb tip
 
+        ix, iy = index_finger[:2]
+        tx, ty = thumb[:2]
 
-    results = hands.process(frame_for_mediapipe)
+        # Flip the x-coordinate to match Pygame
+        ix = WIDTH - ix
 
-    hand_detected = False 
+        pygame.draw.circle(screen, (0, 255, 0), (ix, iy), 10)  # Green tracking dot
 
-    if results.multi_hand_landmarks:
-        for hand_landmarks in results.multi_hand_landmarks:
-            hand_detected = True  
-            if detect_snap(hand_landmarks): 
-                if not game_started:
-                    game_started = True
-                    start_time = time.time()  
-                    score = 0  
-                    timer = 30 
+        # Calculate distance between index finger and thumb
+        distance = np.linalg.norm(np.array([ix, iy]) - np.array([WIDTH - tx, ty]))
 
-            if game_started:  
-                
-                index_finger = hand_landmarks.landmark[8]
-                ix, iy = int(index_finger.x * WIDTH), int(index_finger.y * HEIGHT)
+        # Snap Detection: Only trigger if game is NOT running and cooldown is over
+        if not game_started and game_over_time is None and prev_distance is not None:
+            if prev_distance > 50 and distance < 30:  # Thresholds for snap
+                snap_detected = True
 
-                pygame.draw.circle(screen, (0, 255, 0), (ix, iy), 10)
+        prev_distance = distance  # Update previous distance for next frame
 
+        if snap_detected and not game_started and game_over_time is None:
+            game_started = True
+            snap_cooldown = True  # Prevent further snaps from restarting game
+            start_time = time.time()
+            score = 0
+            timer = 30
+            snap_detected = False  # Reset snap detection
         
-                if abs(ix - target_x) < target_size//2 and abs(iy - target_y) < target_size//2:
-                    target_x, target_y = np.random.randint(50, WIDTH-50), np.random.randint(50, HEIGHT-50)  
-                    score += 1  
-
-
-            for lm in hand_landmarks.landmark:
-                px, py = int(lm.x * WIDTH), int(lm.y * HEIGHT)
-                pygame.draw.circle(screen, (255, 0, 0), (px, py), 2)
+        if game_started:
+            if abs(ix - target_x) < target_size // 2 and abs(iy - target_y) < target_size // 2:
+                target_x, target_y = np.random.randint(50, WIDTH - 50), np.random.randint(50, HEIGHT - 50)
+                score += 1
 
     if game_started:
-    
         elapsed_time = time.time() - start_time
-        timer = max(0, 30 - int(elapsed_time)) 
+        timer = max(0, 30 - int(elapsed_time))
 
-    
-        screen.blit(target_img, (target_x - target_size//2, target_y - target_size//2))
-
-    
+        screen.blit(target_img, (target_x - target_size // 2, target_y - target_size // 2))
         draw_text_outline(screen, f"Time: {timer}", 20, 20, font, (255, 255, 255), (0, 0, 0))
         draw_text_outline(screen, f"Score: {score}", 20, 70, font, (255, 255, 255), (0, 0, 0))
 
-    
         if timer == 0:
-            game_started = False  
-            draw_text_outline(screen, "Game Over!", WIDTH//2 - 100, HEIGHT//2, font, (255, 255, 255), (0, 0, 0))
-            draw_text_outline(screen, f"Final Score: {score}", WIDTH//2 - 120, HEIGHT//2 + 50, font, (255, 255, 255), (0, 0, 0))
-            draw_text_outline(screen, "Snap to Play Again!", WIDTH//2 - 150, HEIGHT//2 + 100, font, (255, 255, 255), (0, 0, 0))
+            game_started = False
+            snap_cooldown = True  # Prevent snap restart immediately
+            game_over_time = time.time()  # Start countdown for game over screen
+    
+    elif game_over_time is not None:
+        # Show Game Over Screen for 7 seconds before allowing restart
+        elapsed_game_over = time.time() - game_over_time
+        draw_text_outline(screen, "Game Over!", WIDTH // 2 - 100, HEIGHT // 2, font, (255, 255, 255), (0, 0, 0))
+        draw_text_outline(screen, f"Final Score: {score}", WIDTH // 2 - 120, HEIGHT // 2 + 50, font, (255, 255, 255), (0, 0, 0))
+
+        if elapsed_game_over >= 7:  # After 7 seconds, allow restarting again
+            game_over_time = None  # Reset game over time
+            snap_cooldown = False  # Allow snapping to restart
+        else:
+            draw_text_outline(screen, "Restarting soon...", WIDTH // 2 - 140, HEIGHT // 2 + 100, font, (255, 255, 255), (0, 0, 0))
 
     else:
-        draw_text_outline(screen, "Snap to Start!", WIDTH//2 - 120, HEIGHT//2, font, (255, 255, 255), (0, 0, 0))
+        draw_text_outline(screen, "Snap your fingers to start!", WIDTH // 2 - 180, HEIGHT // 2, font, (255, 255, 255), (0, 0, 0))
 
     pygame.display.update()
 
