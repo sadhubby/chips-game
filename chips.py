@@ -43,7 +43,7 @@ def draw_text_outline(surface, text, x, y, font, color, outline_color):
     surface.blit(outline_surface, (x-2, y+2))
     surface.blit(outline_surface, (x+2, y+2))
     
-    # Draw main text
+
     surface.blit(text_surface, (x, y))
 
 def detect_snap(hand_landmarks):
@@ -113,7 +113,7 @@ while running:
     if game_started:
     
         elapsed_time = time.time() - start_time
-        timer = max(0, 30 - int(elapsed_time))  # Countdown
+        timer = max(0, 30 - int(elapsed_time)) 
 
     
         screen.blit(target_img, (target_x - target_size//2, target_y - target_size//2))
